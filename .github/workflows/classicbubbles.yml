@@ -39,6 +39,18 @@ jobs:
           assert files==set(manifest) and len(files)==56
           for path,expected in manifest.items():
               assert hashlib.sha256((root/path).read_bytes()).hexdigest()==expected,path
+          # Darwin exposes these protections through its full feature namespace.
+          old = '#define _POSIX_C_SOURCE 200809L\n'
+          new = '#if defined(__APPLE__)\n#define _DARWIN_C_SOURCE 1\n#else\n#define _POSIX_C_SOURCE 200809L\n#endif\n'
+          for name in ('common/CBLJournal.c','tests/journal_test.c'):
+              p=root/name
+              original=p.read_text()
+              assert original.startswith(old)
+              p.write_text(new+original[len(old):])
+              manifest[name]=hashlib.sha256(p.read_bytes()).hexdigest()
+          raw=(json.dumps(manifest,indent=2,sort_keys=True)+'\n').encode()
+          assert hashlib.sha256(raw).hexdigest()=='5de5647459cea646b99d2d5fb407300aae59a2d6e89087aa7c3397001f79cccc'
+          (root/'SHA256_MANIFEST.json').write_bytes(raw)
           for path in ('layout/DEBIAN/postinst','layout/DEBIAN/postrm','tests/run_macos.sh'):
               (root/path).chmod(0o755)
           print('PASS: all 56 source hashes match reviewed v0.1.8; modern preview untouched')
