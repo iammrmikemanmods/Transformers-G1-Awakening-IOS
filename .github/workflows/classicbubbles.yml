@@ -55,6 +55,24 @@ jobs:
               digest = hashlib.sha256(p.read_bytes()).hexdigest()
               assert digest == expected, digest
               manifest[str(p)] = digest
+          p = Path('.github/workflows/build.yml')
+          s = p.read_text()
+          anchor = '          make clean package FINALPACKAGE=1 2>&1 | tee BUILD_LOG.txt\n'
+          normal = '          for deb in packages/*.deb; do\n            stage=$(mktemp -d)\n            dpkg-deb --raw-extract "$deb" "$stage"\n            dpkg-deb --root-owner-group -Zxz -z9 --build "$stage" "$deb.normalized"\n            mv "$deb.normalized" "$deb"\n            rm -rf -- "$stage"\n          done\n'
+          assert s.count(anchor) == 1
+          p.write_text(s.replace(anchor, anchor + normal))
+          digest = hashlib.sha256(p.read_bytes()).hexdigest()
+          assert digest == 'ae0226286563b8bd032a071cff2ff3ceee9aed35d284632f0627ef0cbcb57924'
+          manifest[str(p)] = digest
+          p = Path('README.md')
+          s = p.read_text()
+          anchor = 'Use current Xcode and Theos, then `make clean package FINALPACKAGE=1`.\n'
+          new = 'Use the included macOS GitHub Actions workflow for the verified release path.\nIt compiles using Xcode/Theos, then normalises numeric archive ownership to 0:0\nwith `dpkg-deb --root-owner-group` before validation. Direct Theos packaging on\nmacOS can retain the build account\'s numeric UID/GID despite root/wheel names;\ndo not distribute that unnormalised intermediate package.\n'
+          assert s.count(anchor) == 1
+          p.write_text(s.replace(anchor, new))
+          digest = hashlib.sha256(p.read_bytes()).hexdigest()
+          assert digest == 'bca9454ec288ac3bfddd6d6ea28e614d2a57a29a4ddc3eda4c7a7e3acc5a0d78'
+          manifest[str(p)] = digest
           Path('SHA256_MANIFEST.json').write_text(json.dumps(manifest, indent=2, sort_keys=True) + '\n')
           PY
           python3 tests/test_source.py
@@ -82,6 +100,13 @@ jobs:
         run: |
           set -euo pipefail
           make clean package FINALPACKAGE=1 2>&1 | tee BUILD_LOG.txt
+          for deb in packages/*.deb; do
+            stage=$(mktemp -d)
+            dpkg-deb --raw-extract "$deb" "$stage"
+            dpkg-deb --root-owner-group -Zxz -z9 --build "$stage" "$deb.normalized"
+            mv "$deb.normalized" "$deb"
+            rm -rf -- "$stage"
+          done
           python3 tests/validate_deb.py packages/*.deb | tee PACKAGE_VALIDATION.txt
           shasum -a 256 packages/*.deb | tee BUILD_SHA256.txt
           { xcodebuild -version; xcrun clang --version; git -C "$THEOS" rev-parse HEAD; } > BUILD_TOOLCHAIN.txt
