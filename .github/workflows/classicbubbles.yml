@@ -1,4 +1,4 @@
-name: ClassicBubbles Lab 0.1.7 provenance menu and legacy renderer trial
+name: ClassicBubbles Lab 0.1.8 legacy crash recovery
 on:
   push:
     branches: [ci/classicbubbles-lab-20261108]
@@ -11,185 +11,43 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Reconstruct/verify 0.1.0–0.1.7 source and complete regression suite
+      - name: Reconstruct verified baseline and apply checked recovery patch
         shell: bash
         run: |
           set -euo pipefail
-          cat ci/classicbubbles/source.part*.b64 | base64 -D > /tmp/classicbubbles-source.tar.xz
-          echo 'b11ac84dc5c63860b3bf189e3fec95efcc9c7133b2187513d4194f877dde81b8  /tmp/classicbubbles-source.tar.xz' | shasum -a 256 -c -
-          cat ci/classicbubbles/v011.patch.part1 ci/classicbubbles/v011.patch.part2 ci/classicbubbles/v011.patch.part3 > /tmp/v011.patch.xz
-          echo '29d598152f5f83c2d7bb59bb4721a7db322b2ceb3e477a4eccdaf8329f415dda  /tmp/v011.patch.xz' | shasum -a 256 -c -
-          xz -dc /tmp/v011.patch.xz > /tmp/v011.patch
-          echo 'd819371b72a72431c3a5c432dcf91b84acde1f2c5755164894d5494397537ec4  /tmp/v011.patch' | shasum -a 256 -c -
-          mkdir work
-          tar -xJf /tmp/classicbubbles-source.tar.xz -C work
-          cd work
+          git fetch --depth=1 origin 8db7583027ac599e81910c8a4515451b9ced52fb
+          git show 8db7583027ac599e81910c8a4515451b9ced52fb:.github/workflows/classicbubbles.yml > /tmp/cbl017-workflow.yml
           python3 - <<'PY'
           from pathlib import Path
-          import hashlib, json
-          for path, expected in json.loads(Path('SHA256_MANIFEST.json').read_text()).items():
-              assert hashlib.sha256(Path(path).read_bytes()).hexdigest() == expected, path
-          PY
-          patch -p1 -F 0 --batch --forward -i /tmp/v011.patch
-          python3 - <<'PY'
-          from pathlib import Path
-          import hashlib, json
-          paths = [p for p in sorted(Path('.').rglob('*')) if p.is_file() and p.name != 'SHA256_MANIFEST.json']
-          assert len(paths) == 31, [str(p) for p in paths]
-          manifest = {str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
-          text = json.dumps(manifest, indent=2, sort_keys=True) + '\n'
-          assert hashlib.sha256(text.encode()).hexdigest() == '330828ec3ebd9ee4569eaaeaa23c652145d452f501bab418aa9f97980297323c', text
-          Path('SHA256_MANIFEST.json').write_text(text)
-          print('PASS: all 31 source file hashes match the audited 0.1.1 source')
-          PY
-          cat ../ci/classicbubbles/v012.patch.part1 ../ci/classicbubbles/v012.patch.part2 ../ci/classicbubbles/v012.patch.part3 ../ci/classicbubbles/v012.patch.part4 | base64 -D > /tmp/v012.patch.xz
-          echo '70cc3d72d2e579b09b3ff0a5df1806aaecedee5dc38ed6a18b08a2c4c1ee1fcc  /tmp/v012.patch.xz' | shasum -a 256 -c -
-          xz -dc /tmp/v012.patch.xz > /tmp/v012.patch
-          echo 'a56daeae074ca113f326e7afbc3c63574f0028d845c702938dad50fc203be4ac  /tmp/v012.patch' | shasum -a 256 -c -
-          patch -p1 -F 0 --batch --forward -i /tmp/v012.patch
-          python3 - <<'PY'
-          from pathlib import Path
-          import hashlib
-          p = Path('lab/CBLPreview.m')
-          raw = p.read_bytes()
-          assert hashlib.sha256(raw).hexdigest() == '14a767b7ef35cf0ac0d3562c44cdf4946984123b2cef7852753fef7349b4e785'
-          old = '    self.fullscreenToggle.configuration = [UIButtonConfiguration filledButtonConfiguration];'
-          new = '    UIButtonConfiguration *toggleStyle = [UIButtonConfiguration filledButtonConfiguration];\n    toggleStyle.title = @"Hide controls";\n    self.fullscreenToggle.configuration = toggleStyle;'
-          text = raw.decode()
-          assert text.count(old) == 1
-          p.write_text(text.replace(old, new))
-          assert hashlib.sha256(p.read_bytes()).hexdigest() == 'abc8287d43c4b328b9bf22dc9ef7e95be660ba2a442e9ea36ff73784a452b910'
-
-          p = Path('.github/workflows/build.yml')
-          raw = p.read_bytes()
-          assert hashlib.sha256(raw).hexdigest() == 'aa51500ea8abab7f7da2abd7bf6f44b5b505e41036cc517bc87bcb2ba2105b75'
-          text = raw.decode()
-          for old, new in [
-              ('theos-branch: 8167f59de02fd32cf45b16bfcb1330dfa5c9974c','theos-branch: master'),
-              ('sdks-branch: 0222fd5413cf4b9af096f37b4621afa2688572f7','sdks-branch: master')
-          ]:
-              assert text.count(old) == 1
-              text = text.replace(old, new)
-          anchor = '      - name: Ensure package validation tools\n'
-          verified = """      - name: Verify exact Theos and SDK revisions before compilation\n        shell: bash\n        run: |\n          set -euo pipefail\n          test "$(git -C "$THEOS" rev-parse HEAD)" = '8167f59de02fd32cf45b16bfcb1330dfa5c9974c'\n          test "$(git -C "$THEOS/sdks" rev-parse HEAD)" = '0222fd5413cf4b9af096f37b4621afa2688572f7'\n"""
-          assert text.count(anchor) == 1
-          p.write_text(text.replace(anchor, verified + anchor))
-          actual = hashlib.sha256(p.read_bytes()).hexdigest()
-          assert actual == '487fe6a51c688fe7fbb91dbb49e95472f3139d518d9a5843e006617c2bb28b9a', actual
-          PY
-          python3 - <<'PY'
-          from pathlib import Path
-          import hashlib, json
-          paths = [p for p in sorted(Path('.').rglob('*')) if p.is_file() and p.name != 'SHA256_MANIFEST.json']
-          assert len(paths) == 31, [str(p) for p in paths]
-          manifest = {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
-          txt = json.dumps(manifest, indent=2, sort_keys=True) + '\n'
-          actual = hashlib.sha256(txt.encode()).hexdigest()
-          assert actual == '21d5b8b3a0799ffaad9f7d20c935d9c635ab09cdab281c9f3bde9835b4f49f48', actual
-          Path('SHA256_MANIFEST.json').write_text(txt)
-          print('PASS: all 31 source hashes match audited 0.1.2')
-          PY
-          cat ../ci/classicbubbles/v013.patch.part1.b64 ../ci/classicbubbles/v013.patch.part2.b64 ../ci/classicbubbles/v013.patch.part3.b64 ../ci/classicbubbles/v013.patch.part4.b64 | base64 -D > /tmp/v013.patch.xz
-          echo 'a4ee55b44f7432ab03b87a0c73e2ccc72df30624e90e6e0cb37f0d1ba2330ef1  /tmp/v013.patch.xz' | shasum -a 256 -c -
-          xz -dc /tmp/v013.patch.xz > /tmp/v013.patch
-          echo '867c49f002277f6deb71448a16df19b5714d29e0dc756a824a2e8379f3bac2e7  /tmp/v013.patch' | shasum -a 256 -c -
-          patch -p1 -F 0 --batch --forward -i /tmp/v013.patch
-          python3 - <<'PY'
-          from pathlib import Path
-          import hashlib, json
-          manifest_bytes = Path('SHA256_MANIFEST.json').read_bytes()
-          assert hashlib.sha256(manifest_bytes).hexdigest() == 'ab58b21b605d233ca9559da06145c50f9e9a9ce9a65977d6c3616ebfd1e81092'
-          manifest = json.loads(manifest_bytes)
-          files = [p for p in Path('.').rglob('*') if p.is_file() and p.name != 'SHA256_MANIFEST.json']
-          assert len(files) == len(manifest) == 34
-          assert {str(p) for p in files} == set(manifest)
-          for path, expected in manifest.items():
-              assert hashlib.sha256(Path(path).read_bytes()).hexdigest() == expected, path
-          print('PASS: 0.1.3 has exactly 34 integrity-verified source files')
-          PY
-          cat ../ci/classicbubbles/v014.patch.part1.b64 ../ci/classicbubbles/v014.patch.part2.b64 ../ci/classicbubbles/v014.patch.part3.b64 ../ci/classicbubbles/v014.patch.part4.b64 | base64 -D > /tmp/v014.patch.xz
-          echo '5355e740ffc4b7ba1b1d0292ed84a74a5930fbac627ce46ab51ea7a9b3a27707  /tmp/v014.patch.xz' | shasum -a 256 -c -
-          xz -dc /tmp/v014.patch.xz > /tmp/v014.patch
-          echo '6456dfca829dc7ac7bc22c187a9a9145892daa4f32523d3f0d181d83298c4d46  /tmp/v014.patch' | shasum -a 256 -c -
-          patch -p1 -F 0 --batch --forward -i /tmp/v014.patch
-          python3 - <<'PY'
-          from pathlib import Path
-          import hashlib, json
-          paths = [p for p in sorted(Path('.').rglob('*')) if p.is_file() and p.name != 'SHA256_MANIFEST.json']
-          assert len(paths) == 38, len(paths)
-          manifest = {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
-          data = (json.dumps(manifest, indent=2, sort_keys=True) + '\n').encode('utf-8')
-          actual = hashlib.sha256(data).hexdigest()
-          assert actual == '633db51088d1e566100fb0ecf816a432dd9b318de878a47222d57947e35c178c', actual
-          Path('SHA256_MANIFEST.json').write_bytes(data)
-          print('PASS: Stage4 source matches all 38 audited file SHA-256 values')
-          PY
-          cat ../ci/classicbubbles/v015.patch.part1.b64 ../ci/classicbubbles/v015.patch.part2.b64 ../ci/classicbubbles/v015.patch.part3.b64 | base64 -D > /tmp/v015.patch.xz
-          echo 'ebfc7871241c0f90a13174e2fce1414d4b92594cfd54737655b5395d28383cb5  /tmp/v015.patch.xz' | shasum -a 256 -c -
-          xz -dc /tmp/v015.patch.xz > /tmp/v015.patch
-          echo '3a520aa0ef36e1628479876b95921e36437ab4b3133689e5ec63b8b1071a5960  /tmp/v015.patch' | shasum -a 256 -c -
-          patch -p1 -F 0 --batch --forward -i /tmp/v015.patch
-          python3 - <<'PY'
-          from pathlib import Path
-          import hashlib, json
-          files = [p for p in sorted(Path('.').rglob('*')) if p.is_file() and p.name != 'SHA256_MANIFEST.json']
-          assert len(files) == 39, len(files)
-          manifest = {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in files}
-          raw = (json.dumps(manifest, indent=2, sort_keys=True) + '\n').encode('utf-8')
-          assert hashlib.sha256(raw).hexdigest() == 'deff20dfdadad579ae3de7fc7e9f3993b68e4a1ad77556a19617073323b13df1'
-          Path('SHA256_MANIFEST.json').write_bytes(raw)
-          print('PASS: all 39 source files match audited 0.1.5 manifest; preview baseline preserved')
-          PY
-          cat ../ci/classicbubbles/v016.patch.part1.b64 ../ci/classicbubbles/v016.patch.part2.b64 ../ci/classicbubbles/v016.patch.part3.b64 ../ci/classicbubbles/v016.patch.part4.b64 | base64 -D > /tmp/v016.patch.xz
-          echo 'c28946f3266efba000208a459c23c34f37a0442b43eadd7788ae3fbe8abe6674  /tmp/v016.patch.xz' | shasum -a 256 -c -
-          xz -dc /tmp/v016.patch.xz > /tmp/v016.patch
-          echo '2df794ff7c5a98ce711d79769bde1e652f1230d95de077c1e7856901aedf1c51  /tmp/v016.patch' | shasum -a 256 -c -
-          patch -p1 -F 0 --batch --forward -i /tmp/v016.patch
-          python3 - <<'PY'
-          from pathlib import Path
-          import hashlib, json
-          paths = sorted(p for p in Path('.').rglob('*') if p.is_file() and p.name != 'SHA256_MANIFEST.json')
-          assert len(paths) == 41, len(paths)
-          manifest = {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
-          raw = (json.dumps(manifest,indent=2,sort_keys=True) + '\n').encode('utf-8')
-          value = hashlib.sha256(raw).hexdigest()
-          assert value == '04e1d004437e707fce70599bb8634842ea6714a6dfab8d86d675e539a9962863', value
-          Path('SHA256_MANIFEST.json').write_bytes(raw)
-          print('PASS: all 41 source files match audited 0.1.6; no untracked source')
-          PY
-          cat ../ci/classicbubbles/v017.patch.part1.b64 ../ci/classicbubbles/v017.patch.part2.b64 ../ci/classicbubbles/v017.patch.part3.b64 ../ci/classicbubbles/v017.patch.part4.b64 ../ci/classicbubbles/v017.patch.part5.b64 ../ci/classicbubbles/v017.patch.part6.b64 ../ci/classicbubbles/v017.patch.part7.b64 | base64 -D > /tmp/v017.patch.xz
-          echo '71ba45ef428c6842cdee2e804bfe4d7bc7a219d1472840a13d7526e1c55b7cfb  /tmp/v017.patch.xz' | shasum -a 256 -c -
-          xz -dc /tmp/v017.patch.xz > /tmp/v017.patch
-          echo '5278b46a32c43943834a269b738adc9b05f6346524fc60b4e938c5b277d513ec  /tmp/v017.patch' | shasum -a 256 -c -
-          patch -p1 -F 0 --batch --forward -i /tmp/v017.patch
-          python3 - <<'PY'
-          from pathlib import Path
-          import hashlib,json
-          raw=Path('SHA256_MANIFEST.json').read_bytes()
-          assert hashlib.sha256(raw).hexdigest() == '990d4746d597b2c887007169b57e21409cd1753c5c835a2ccd94785266657e23'
+          import base64,hashlib,json,lzma,subprocess,textwrap
+          previous=Path('/tmp/cbl017-workflow.yml').read_text()
+          block=previous.split('        run: |\n',1)[1].split('          python3 tests/ui_provenance_test.py',1)[0]
+          assert '45 file hashes match audited v0.1.7' in block
+          subprocess.run(['/bin/bash','-e','-o','pipefail','-c',textwrap.dedent(block)],check=True)
+          encoded=''.join(Path(f'ci/classicbubbles/v018.patch.part{i}.b64').read_text() for i in range(1,7))
+          compressed=base64.b64decode(encoded,validate=True)
+          assert hashlib.sha256(compressed).hexdigest()=='490b0c16663d01a7a9adbfbe235cbc7a5f0005cbda98fa515fcd8cb8b4c33c5d'
+          patch=lzma.decompress(compressed)
+          assert hashlib.sha256(patch).hexdigest()=='8ebd9a1157c550fefda8dd98b3145fa747e2bbec537c8a013bc9368e86584e80'
+          Path('/tmp/v018.patch').write_bytes(patch)
+          subprocess.run(['patch','-p1','-F','0','--batch','--forward','-i','/tmp/v018.patch'],cwd='work',check=True)
+          root=Path('work')
+          raw=(root/'SHA256_MANIFEST.json').read_bytes()
+          assert hashlib.sha256(raw).hexdigest()=='611084d42897f5dd449c1ca310b1fe4946a5669597f79ccee8b09cbaeda6274e'
           manifest=json.loads(raw)
-          files=[p for p in Path('.').rglob('*') if p.is_file() and p.name != 'SHA256_MANIFEST.json']
-          assert len(files)==len(manifest)==45
-          assert set(str(p) for p in files)==set(manifest)
-          for p,expected in manifest.items():
-              assert hashlib.sha256(Path(p).read_bytes()).hexdigest()==expected,p
-          print('PASS: 45 file hashes match audited v0.1.7 source; v0.1.6 preview preserved')
+          files={str(p.relative_to(root)) for p in root.rglob('*') if p.is_file() and p.name!='SHA256_MANIFEST.json'}
+          assert files==set(manifest) and len(files)==56
+          for path,expected in manifest.items():
+              assert hashlib.sha256((root/path).read_bytes()).hexdigest()==expected,path
+          for path in ('layout/DEBIAN/postinst','layout/DEBIAN/postrm','tests/run_macos.sh'):
+              (root/path).chmod(0o755)
+          print('PASS: all 56 source hashes match reviewed v0.1.8; modern preview untouched')
           PY
-          python3 tests/ui_provenance_test.py | tee UI_PROVENANCE_TESTS.txt
-          python3 tests/test_source.py
-          python3 tests/host_focus_source_test.py | tee HOST_FOCUS_TESTS.txt
-          python3 tests/native_registration_source_test.py | tee REGISTRATION_TESTS.txt
-          clang -O2 -Wall -Wextra -Werror common/CBLRunner.c tests/runner_test.c -o /tmp/cbl-runner-test
-          /tmp/cbl-runner-test | tee RUNNER_TESTS.txt
-          clang -O2 -Wall -Wextra -Werror common/CBLColor.c tests/color_test.c -o /tmp/cbl-color-test
-          /tmp/cbl-color-test | tee COLOR_TESTS.txt
-          clang -std=c11 -O2 -Wall -Wextra -Werror -pedantic common/CBLPowerRecovery.c tests/power_recovery_test.c -o /tmp/cbl-power-test
-          /tmp/cbl-power-test | tee POWER_RECOVERY_TESTS.txt
-          clang -std=c11 -O2 -Wall -Wextra -Werror -pedantic common/CBLHostFilter.c tests/host_filter_test.c -o /tmp/cbl-host-test
-          /tmp/cbl-host-test | tee HOST_FILTER_TESTS.txt
-          clang -fobjc-arc -fblocks -O2 -Wall -Wextra -Werror -framework Foundation -framework CoreFoundation common/CBLPresets.m common/CBLColor.c tests/preset_test.m -o /tmp/cbl-preset-test
-          /tmp/cbl-preset-test | tee PRESET_TESTS.txt
-      - name: Install pinned Theos and SDK
+      - name: Regression and executable recovery tests
+        working-directory: work
+        shell: bash
+        run: bash tests/run_macos.sh
+      - name: Install Theos and SDK
         uses: waruhachi/theos-action@97afc8c6c361c8b379ee64f42c8a0e41d725ce37
         with:
           theos-src: theos/theos
@@ -201,17 +59,14 @@ jobs:
           altlist: 'false'
           comet: 'false'
           orion: 'false'
-      - name: Confirm exact toolchain snapshot
+      - name: Verify exact toolchain revisions
         shell: bash
         run: |
           set -euo pipefail
           test "$(git -C "$THEOS" rev-parse HEAD)" = '8167f59de02fd32cf45b16bfcb1330dfa5c9974c'
           test "$(git -C "$THEOS/sdks" rev-parse HEAD)" = '0222fd5413cf4b9af096f37b4621afa2688572f7'
-      - name: Ensure packaging tools
-        shell: bash
-        run: |
           if ! command -v dpkg-deb >/dev/null 2>&1; then brew install dpkg; fi
-      - name: Compile actual ARM64 app and helper, package and verify
+      - name: Build native ARM64 binaries and validate package
         working-directory: work
         shell: bash
         run: |
@@ -227,25 +82,18 @@ jobs:
           python3 tests/validate_deb.py packages/*.deb | tee PACKAGE_VALIDATION.txt
           shasum -a 256 packages/*.deb | tee BUILD_SHA256.txt
           { xcodebuild -version; xcrun clang --version; git -C "$THEOS" rev-parse HEAD; } > BUILD_TOOLCHAIN.txt
-      - name: Upload compiled package and audit evidence
+      - name: Upload installer and audit evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ClassicBubbles-Lab-0.1.7-rootless
+          name: ClassicBubbles-Lab-0.1.8-rootless
           path: |
             work/packages/*.deb
+            work/*TESTS.txt
             work/BUILD_LOG.txt
             work/PACKAGE_VALIDATION.txt
             work/BUILD_SHA256.txt
             work/BUILD_TOOLCHAIN.txt
-            work/RUNNER_TESTS.txt
-            work/COLOR_TESTS.txt
-            work/POWER_RECOVERY_TESTS.txt
-            work/HOST_FILTER_TESTS.txt
-            work/HOST_FOCUS_TESTS.txt
-            work/REGISTRATION_TESTS.txt
-            work/UI_PROVENANCE_TESTS.txt
-            work/PRESET_TESTS.txt
             work/SHA256_MANIFEST.json
           if-no-files-found: error
           retention-days: 30
