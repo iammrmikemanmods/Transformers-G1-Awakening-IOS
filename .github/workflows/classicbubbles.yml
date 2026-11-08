@@ -1,4 +1,4 @@
-name: ClassicBubbles Lab 0.1.6 native procedural registration preflight
+name: ClassicBubbles Lab 0.1.7 provenance menu and legacy renderer trial
 on:
   push:
     branches: [ci/classicbubbles-lab-20261108]
@@ -11,7 +11,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Reconstruct/verify 0.1.0–0.1.6 source, regression suite and registration safety
+      - name: Reconstruct/verify 0.1.0–0.1.7 source and complete regression suite
         shell: bash
         run: |
           set -euo pipefail
@@ -157,6 +157,25 @@ jobs:
           Path('SHA256_MANIFEST.json').write_bytes(raw)
           print('PASS: all 41 source files match audited 0.1.6; no untracked source')
           PY
+          cat ../ci/classicbubbles/v017.patch.part1.b64 ../ci/classicbubbles/v017.patch.part2.b64 ../ci/classicbubbles/v017.patch.part3.b64 ../ci/classicbubbles/v017.patch.part4.b64 ../ci/classicbubbles/v017.patch.part5.b64 ../ci/classicbubbles/v017.patch.part6.b64 ../ci/classicbubbles/v017.patch.part7.b64 | base64 -D > /tmp/v017.patch.xz
+          echo '71ba45ef428c6842cdee2e804bfe4d7bc7a219d1472840a13d7526e1c55b7cfb  /tmp/v017.patch.xz' | shasum -a 256 -c -
+          xz -dc /tmp/v017.patch.xz > /tmp/v017.patch
+          echo '5278b46a32c43943834a269b738adc9b05f6346524fc60b4e938c5b277d513ec  /tmp/v017.patch' | shasum -a 256 -c -
+          patch -p1 -F 0 --batch --forward -i /tmp/v017.patch
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json
+          raw=Path('SHA256_MANIFEST.json').read_bytes()
+          assert hashlib.sha256(raw).hexdigest() == '990d4746d597b2c887007169b57e21409cd1753c5c835a2ccd94785266657e23'
+          manifest=json.loads(raw)
+          files=[p for p in Path('.').rglob('*') if p.is_file() and p.name != 'SHA256_MANIFEST.json']
+          assert len(files)==len(manifest)==45
+          assert set(str(p) for p in files)==set(manifest)
+          for p,expected in manifest.items():
+              assert hashlib.sha256(Path(p).read_bytes()).hexdigest()==expected,p
+          print('PASS: 45 file hashes match audited v0.1.7 source; v0.1.6 preview preserved')
+          PY
+          python3 tests/ui_provenance_test.py | tee UI_PROVENANCE_TESTS.txt
           python3 tests/test_source.py
           python3 tests/host_focus_source_test.py | tee HOST_FOCUS_TESTS.txt
           python3 tests/native_registration_source_test.py | tee REGISTRATION_TESTS.txt
@@ -212,7 +231,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ClassicBubbles-Lab-0.1.6-rootless
+          name: ClassicBubbles-Lab-0.1.7-rootless
           path: |
             work/packages/*.deb
             work/BUILD_LOG.txt
@@ -225,6 +244,7 @@ jobs:
             work/HOST_FILTER_TESTS.txt
             work/HOST_FOCUS_TESTS.txt
             work/REGISTRATION_TESTS.txt
+            work/UI_PROVENANCE_TESTS.txt
             work/PRESET_TESTS.txt
             work/SHA256_MANIFEST.json
           if-no-files-found: error
