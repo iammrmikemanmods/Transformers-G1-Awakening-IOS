@@ -1,4 +1,4 @@
-name: ClassicBubbles Lab 0.1.0 native diagnostic app
+name: ClassicBubbles Lab 0.1.1 native preview experiment
 on:
   push:
     branches: [ci/classicbubbles-lab-20261108]
@@ -11,80 +11,51 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Reconstruct and verify source
+      - name: Reconstruct source and apply integrity-checked 0.1.1 patch
         shell: bash
         run: |
           set -euo pipefail
           cat ci/classicbubbles/source.part*.b64 | base64 -D > /tmp/classicbubbles-source.tar.xz
           echo 'b11ac84dc5c63860b3bf189e3fec95efcc9c7133b2187513d4194f877dde81b8  /tmp/classicbubbles-source.tar.xz' | shasum -a 256 -c -
+          cat ci/classicbubbles/v011.patch.part1 ci/classicbubbles/v011.patch.part2 ci/classicbubbles/v011.patch.part3 > /tmp/v011.patch.xz
+          echo '29d598152f5f83c2d7bb59bb4721a7db322b2ceb3e477a4eccdaf8329f415dda  /tmp/v011.patch.xz' | shasum -a 256 -c -
+          xz -dc /tmp/v011.patch.xz > /tmp/v011.patch
+          echo 'd819371b72a72431c3a5c432dcf91b84acde1f2c5755164894d5494397537ec4  /tmp/v011.patch' | shasum -a 256 -c -
           mkdir work
           tar -xJf /tmp/classicbubbles-source.tar.xz -C work
           cd work
           python3 - <<'PY'
           from pathlib import Path
           import hashlib, json
-          manifest = json.loads(Path('SHA256_MANIFEST.json').read_text())
-          for path, expected in manifest.items():
+          for path, expected in json.loads(Path('SHA256_MANIFEST.json').read_text()).items():
               assert hashlib.sha256(Path(path).read_bytes()).hexdigest() == expected, path
-          p = Path('lab/ClassicBubblesLab.m')
-          s = p.read_text()
-          replacements = {
-              'button.contentEdgeInsets = UIEdgeInsetsMake(12, 14, 12, 14);': '''UIButtonConfiguration *configuration = [UIButtonConfiguration plainButtonConfiguration];
-              configuration.attributedTitle = [[NSAttributedString alloc] initWithString:title attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold]}];
-              configuration.contentInsets = NSDirectionalEdgeInsetsMake(12, 14, 12, 14);
-              button.configuration = configuration;''',
-              'self.shareButton.contentEdgeInsets = UIEdgeInsetsMake(14, 14, 14, 14);': '''UIButtonConfiguration *shareConfiguration = [UIButtonConfiguration plainButtonConfiguration];
-              shareConfiguration.attributedTitle = [[NSAttributedString alloc] initWithString:@"Share Report…" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:17 weight:UIFontWeightSemibold]}];
-              shareConfiguration.contentInsets = NSDirectionalEdgeInsetsMake(14, 14, 14, 14);
-              self.shareButton.configuration = shareConfiguration;''',
-          }
-          for old, new in replacements.items():
-              assert s.count(old) == 1, old
-              s = s.replace(old, new)
-          assert 'contentEdgeInsets' not in s
-          p.write_text(s)
-          digest = hashlib.sha256(p.read_bytes()).hexdigest()
-          assert digest == 'e85a783f858a352e54cf0b8aa4eb70e9f0e22a3080226cb904fdeb13522a19d6', digest
-          manifest[str(p)] = digest
-          for sub, expected in [('lab', '00c6fb182b0661913e13b2a134d14040882ab13c1ea7316b69da0b00e30cbcee'), ('probe', 'e527cea49d5818cf77ee6e78e4d23074450434ae8efcf0f58b97a6652a676e56')]:
-              p = Path(sub) / 'Makefile'
-              s = p.read_text()
-              old = '$(THEOS_PROJECT_DIR)/entitlements.plist'
-              assert s.count(old) == 1
-              p.write_text(s.replace(old, f'$(THEOS_PROJECT_DIR)/{sub}/entitlements.plist'))
-              digest = hashlib.sha256(p.read_bytes()).hexdigest()
-              assert digest == expected, digest
-              manifest[str(p)] = digest
-          p = Path('.github/workflows/build.yml')
-          s = p.read_text()
-          anchor = '          make clean package FINALPACKAGE=1 2>&1 | tee BUILD_LOG.txt\n'
-          normal = '          for deb in packages/*.deb; do\n            stage=$(mktemp -d)\n            dpkg-deb --raw-extract "$deb" "$stage"\n            dpkg-deb --root-owner-group -Zxz -z9 --build "$stage" "$deb.normalized"\n            mv "$deb.normalized" "$deb"\n            rm -rf -- "$stage"\n          done\n'
-          assert s.count(anchor) == 1
-          p.write_text(s.replace(anchor, anchor + normal))
-          digest = hashlib.sha256(p.read_bytes()).hexdigest()
-          assert digest == 'ae0226286563b8bd032a071cff2ff3ceee9aed35d284632f0627ef0cbcb57924'
-          manifest[str(p)] = digest
-          p = Path('README.md')
-          s = p.read_text()
-          anchor = 'Use current Xcode and Theos, then `make clean package FINALPACKAGE=1`.\n'
-          new = 'Use the included macOS GitHub Actions workflow for the verified release path.\nIt compiles using Xcode/Theos, then normalises numeric archive ownership to 0:0\nwith `dpkg-deb --root-owner-group` before validation. Direct Theos packaging on\nmacOS can retain the build account\'s numeric UID/GID despite root/wheel names;\ndo not distribute that unnormalised intermediate package.\n'
-          assert s.count(anchor) == 1
-          p.write_text(s.replace(anchor, new))
-          digest = hashlib.sha256(p.read_bytes()).hexdigest()
-          assert digest == 'bca9454ec288ac3bfddd6d6ea28e614d2a57a29a4ddc3eda4c7a7e3acc5a0d78'
-          manifest[str(p)] = digest
-          Path('SHA256_MANIFEST.json').write_text(json.dumps(manifest, indent=2, sort_keys=True) + '\n')
+          PY
+          patch -p1 -F 0 --batch --forward -i /tmp/v011.patch
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json
+          paths = [p for p in sorted(Path('.').rglob('*')) if p.is_file() and p.name != 'SHA256_MANIFEST.json']
+          assert len(paths) == 31, [str(p) for p in paths]
+          manifest = {str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
+          text = json.dumps(manifest, indent=2, sort_keys=True) + '\n'
+          assert hashlib.sha256(text.encode()).hexdigest() == '330828ec3ebd9ee4569eaaeaa23c652145d452f501bab418aa9f97980297323c', text
+          Path('SHA256_MANIFEST.json').write_text(text)
+          print('PASS: all 31 source file hashes match the audited 0.1.1 source')
           PY
           python3 tests/test_source.py
           clang -O2 -Wall -Wextra -Werror common/CBLRunner.c tests/runner_test.c -o /tmp/cbl-runner-test
           /tmp/cbl-runner-test | tee RUNNER_TESTS.txt
-      - name: Install Theos and iOS SDK
+          clang -O2 -Wall -Wextra -Werror common/CBLColor.c tests/color_test.c -o /tmp/cbl-color-test
+          /tmp/cbl-color-test | tee COLOR_TESTS.txt
+          clang -fobjc-arc -fblocks -O2 -Wall -Wextra -Werror -framework Foundation -framework CoreFoundation common/CBLPresets.m common/CBLColor.c tests/preset_test.m -o /tmp/cbl-preset-test
+          /tmp/cbl-preset-test | tee PRESET_TESTS.txt
+      - name: Install pinned Theos and SDK
         uses: waruhachi/theos-action@97afc8c6c361c8b379ee64f42c8a0e41d725ce37
         with:
           theos-src: theos/theos
-          theos-branch: master
+          theos-branch: 8167f59de02fd32cf45b16bfcb1330dfa5c9974c
           sdks-src: theos/sdks
-          sdks-branch: master
+          sdks-branch: 0222fd5413cf4b9af096f37b4621afa2688572f7
           remotelog: 'false'
           libgcuniversal: 'false'
           altlist: 'false'
@@ -114,7 +85,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ClassicBubbles-Lab-0.1.0-rootless
+          name: ClassicBubbles-Lab-0.1.1-rootless
           path: |
             work/packages/*.deb
             work/BUILD_LOG.txt
@@ -122,6 +93,8 @@ jobs:
             work/BUILD_SHA256.txt
             work/BUILD_TOOLCHAIN.txt
             work/RUNNER_TESTS.txt
+            work/COLOR_TESTS.txt
+            work/PRESET_TESTS.txt
             work/SHA256_MANIFEST.json
           if-no-files-found: error
           retention-days: 30

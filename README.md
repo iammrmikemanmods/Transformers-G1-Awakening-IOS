@@ -1,14 +1,10 @@
-# ClassicBubbles Lab — isolated iOS package build
+# ClassicBubbles Lab — isolated CI branch
 
-This CI-only branch builds the standalone ClassicBubbles diagnostic application.
-It is not a change to the Transformers game. Do not merge this branch into main.
+This branch builds the ClassicBubbles diagnostic and native-preview app. It is not a Transformers game update and must not be merged into main.
 
-The two base64 parts reconstruct the complete, SHA-256-verified developer source
-archive; CI then compiles both native ARM64 executables and verifies the .deb.
-Package ID: com.iammrmikeman.classicbubbles. Sileo-only deployment.
+0.1.0: user confirmed app/helper execution on iPhone11,8, iOS 17.5.1, UID 501; wallpaper frameworks and native Bokeh classes loaded.
+0.1.1: opt-in native WKBokehView preview experiment with installed presets, Pause/Play, Light/Dark and persistent progress report. No wallpaper application or SpringBoard injection.
 
-Source archive SHA-256:
-b11ac84dc5c63860b3bf189e3fec95efcc9c7133b2187513d4194f877dde81b8
+The immutable base source plus compressed, SHA-256-pinned diff reconstructs the complete developer source. The final manifest verifies every source file before compilation. Package identifier remains com.iammrmikeman.classicbubbles. Installation/upgrades/removal through Sileo exclusively.
 
-Compilation and offline validation are not on-device testing. The user must test
-installation, app launch, diagnostics and report sharing on the iPhone XR.
+Build validation does not establish successful native rendering on the phone; that remains pending the user's preview test.
