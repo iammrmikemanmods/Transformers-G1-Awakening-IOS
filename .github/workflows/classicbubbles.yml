@@ -1,4 +1,4 @@
-name: ClassicBubbles Lab 0.1.1 native preview experiment
+name: ClassicBubbles Lab 0.1.2 full-screen Apple Bokeh experiment
 on:
   push:
     branches: [ci/classicbubbles-lab-20261108]
@@ -11,7 +11,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Reconstruct source and apply integrity-checked 0.1.1 patch
+      - name: Reconstruct source and apply integrity-checked 0.1.1 + 0.1.2 patches
         shell: bash
         run: |
           set -euo pipefail
@@ -41,6 +41,23 @@ jobs:
           assert hashlib.sha256(text.encode()).hexdigest() == '330828ec3ebd9ee4569eaaeaa23c652145d452f501bab418aa9f97980297323c', text
           Path('SHA256_MANIFEST.json').write_text(text)
           print('PASS: all 31 source file hashes match the audited 0.1.1 source')
+          PY
+          cat ci/classicbubbles/v012.patch.part1 ci/classicbubbles/v012.patch.part2 ci/classicbubbles/v012.patch.part3 ci/classicbubbles/v012.patch.part4 | base64 -D > /tmp/v012.patch.xz
+          echo '70cc3d72d2e579b09b3ff0a5df1806aaecedee5dc38ed6a18b08a2c4c1ee1fcc  /tmp/v012.patch.xz' | shasum -a 256 -c -
+          xz -dc /tmp/v012.patch.xz > /tmp/v012.patch
+          echo 'a56daeae074ca113f326e7afbc3c63574f0028d845c702938dad50fc203be4ac  /tmp/v012.patch' | shasum -a 256 -c -
+          patch -p1 -F 0 --batch --forward -i /tmp/v012.patch
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json
+          paths = [p for p in sorted(Path('.').rglob('*')) if p.is_file() and p.name != 'SHA256_MANIFEST.json']
+          assert len(paths) == 31, [str(p) for p in paths]
+          manifest = {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
+          txt = json.dumps(manifest, indent=2, sort_keys=True) + '\n'
+          actual = hashlib.sha256(txt.encode()).hexdigest()
+          assert actual == '35be906d52e63968e8ea2d1fdaf09a57fb6558e0aa2e7dfc37f5a8ff3cb32101', actual
+          Path('SHA256_MANIFEST.json').write_text(txt)
+          print('PASS: all 31 source hashes match audited 0.1.2')
           PY
           python3 tests/test_source.py
           clang -O2 -Wall -Wextra -Werror common/CBLRunner.c tests/runner_test.c -o /tmp/cbl-runner-test
@@ -85,7 +102,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ClassicBubbles-Lab-0.1.1-rootless
+          name: ClassicBubbles-Lab-0.1.2-rootless
           path: |
             work/packages/*.deb
             work/BUILD_LOG.txt
