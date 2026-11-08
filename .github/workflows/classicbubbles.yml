@@ -1,4 +1,4 @@
-name: ClassicBubbles Lab 0.1.4 Stage 4 read-only wallpaper host map
+name: ClassicBubbles Lab 0.1.5 focused read-only PosterBoard host ABI
 on:
   push:
     branches: [ci/classicbubbles-lab-20261108]
@@ -11,7 +11,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Reconstruct verified 0.1.0 through 0.1.4 source and run regression suites
+      - name: Reconstruct and verify exact source 0.1.0 to 0.1.5; run regression suites
         shell: bash
         run: |
           set -euo pipefail
@@ -124,7 +124,26 @@ jobs:
           Path('SHA256_MANIFEST.json').write_bytes(data)
           print('PASS: Stage4 source matches all 38 audited file SHA-256 values')
           PY
+          cat ../ci/classicbubbles/v015.patch.part1.b64 ../ci/classicbubbles/v015.patch.part2.b64 ../ci/classicbubbles/v015.patch.part3.b64 | base64 -D > /tmp/v015.patch.xz
+          echo 'ebfc7871241c0f90a13174e2fce1414d4b92594cfd54737655b5395d28383cb5  /tmp/v015.patch.xz' | shasum -a 256 -c -
+          xz -dc /tmp/v015.patch.xz > /tmp/v015.patch
+          echo '3a520aa0ef36e1628479876b95921e36437ab4b3133689e5ec63b8b1071a5960  /tmp/v015.patch' | shasum -a 256 -c -
+          patch -p1 -F 0 --batch --forward -i /tmp/v015.patch
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json
+          raw = Path('SHA256_MANIFEST.json').read_bytes()
+          assert hashlib.sha256(raw).hexdigest() == 'deff20dfdadad579ae3de7fc7e9f3993b68e4a1ad77556a19617073323b13df1'
+          manifest = json.loads(raw)
+          files = [p for p in Path('.').rglob('*') if p.is_file() and p.name != 'SHA256_MANIFEST.json']
+          assert len(files) == len(manifest) == 39
+          assert set(str(p) for p in files) == set(manifest), 'unexpected files in source'
+          for path, expected in manifest.items():
+              assert hashlib.sha256(Path(path).read_bytes()).hexdigest() == expected, path
+          print('PASS: all 39 source files match audited 0.1.5 manifest; preview baseline preserved')
+          PY
           python3 tests/test_source.py
+          python3 tests/host_focus_source_test.py | tee HOST_FOCUS_TESTS.txt
           clang -O2 -Wall -Wextra -Werror common/CBLRunner.c tests/runner_test.c -o /tmp/cbl-runner-test
           /tmp/cbl-runner-test | tee RUNNER_TESTS.txt
           clang -O2 -Wall -Wextra -Werror common/CBLColor.c tests/color_test.c -o /tmp/cbl-color-test
@@ -177,7 +196,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ClassicBubbles-Lab-0.1.4-rootless
+          name: ClassicBubbles-Lab-0.1.5-rootless
           path: |
             work/packages/*.deb
             work/BUILD_LOG.txt
@@ -188,6 +207,7 @@ jobs:
             work/COLOR_TESTS.txt
             work/POWER_RECOVERY_TESTS.txt
             work/HOST_FILTER_TESTS.txt
+            work/HOST_FOCUS_TESTS.txt
             work/PRESET_TESTS.txt
             work/SHA256_MANIFEST.json
           if-no-files-found: error
