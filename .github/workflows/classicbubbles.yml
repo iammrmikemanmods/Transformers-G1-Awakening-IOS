@@ -1,4 +1,4 @@
-name: ClassicBubbles Lab 0.1.10 guarded legacy motion
+name: ClassicBubbles Lab 0.1.11 real iOS CFRelease NULL crash safety
 on:
   push:
     branches: [ci/classicbubbles-lab-20261108]
@@ -109,6 +109,35 @@ jobs:
               (root/name).chmod(0o755)
           print('PASS: 62 exact v0.1.10 files; modern Bokeh renderer SHA unchanged')
           PY
+      - name: Apply integrity-checked v0.1.11 proven CFRelease NULL safety patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat ci/classicbubbles/v0111.patch.part{1,2,3,4,5}.b64 | base64 -D > /tmp/v0111.patch.xz
+          echo 'fcf976f691e23612aa9516561ff16dbe02aadebd486c9885dfd51d459420fa05  /tmp/v0111.patch.xz' | shasum -a 256 -c -
+          xz -dc /tmp/v0111.patch.xz > /tmp/v0111.patch
+          echo '89c5fb975c93929f7c4c4b1a7ce24366c849acc277ad5928bafca16d89f4852b  /tmp/v0111.patch' | shasum -a 256 -c -
+          (cd work && patch -p1 -F 0 --batch --forward -i /tmp/v0111.patch)
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json
+          root=Path('work')
+          raw=(root/'SHA256_MANIFEST.json').read_bytes()
+          expected='8cfcf3b20135db4a627d92198d295cedd3970264a48d5fe02ab95abc107d694c'
+          assert hashlib.sha256(raw).hexdigest()==expected
+          manifest=json.loads(raw)
+          paths=[p for p in root.rglob('*') if p.is_file() and p.name!='SHA256_MANIFEST.json']
+          assert len(paths)==len(manifest)==67, len(paths)
+          assert {str(p.relative_to(root)) for p in paths}==set(manifest)
+          for name,sha in manifest.items():
+              assert hashlib.sha256((root/name).read_bytes()).hexdigest()==sha,name
+          assert hashlib.sha256((root/'lab/CBLPreview.m').read_bytes()).hexdigest()=='8cb2a3cf743742d2671b5f5e41aa9163957f926abaf7b43e43a35faea45bb483'
+          assert not (root/'ClassicBubblesLab-2026-11-08-221248.ips').exists()
+          for name in ('layout/DEBIAN/postinst','layout/DEBIAN/postrm','tests/run_macos.sh'):
+              assert (root/name).exists()
+              (root/name).chmod(0o755)
+          print('PASS: 67 source SHA-256 values verified and modern native preview unchanged; proprietary crash file excluded')
+          PY
       - name: Regression and executable recovery tests
         working-directory: work
         shell: bash
@@ -152,7 +181,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ClassicBubbles-Lab-0.1.10-rootless
+          name: ClassicBubbles-Lab-0.1.11-rootless
           path: |
             work/packages/*.deb
             work/*TESTS.txt
