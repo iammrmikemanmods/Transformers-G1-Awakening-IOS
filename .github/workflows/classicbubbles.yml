@@ -42,7 +42,7 @@ jobs:
           Path('SHA256_MANIFEST.json').write_text(text)
           print('PASS: all 31 source file hashes match the audited 0.1.1 source')
           PY
-          cat ci/classicbubbles/v012.patch.part1 ci/classicbubbles/v012.patch.part2 ci/classicbubbles/v012.patch.part3 ci/classicbubbles/v012.patch.part4 | base64 -D > /tmp/v012.patch.xz
+          cat ../ci/classicbubbles/v012.patch.part1 ../ci/classicbubbles/v012.patch.part2 ../ci/classicbubbles/v012.patch.part3 ../ci/classicbubbles/v012.patch.part4 | base64 -D > /tmp/v012.patch.xz
           echo '70cc3d72d2e579b09b3ff0a5df1806aaecedee5dc38ed6a18b08a2c4c1ee1fcc  /tmp/v012.patch.xz' | shasum -a 256 -c -
           xz -dc /tmp/v012.patch.xz > /tmp/v012.patch
           echo 'a56daeae074ca113f326e7afbc3c63574f0028d845c702938dad50fc203be4ac  /tmp/v012.patch' | shasum -a 256 -c -
