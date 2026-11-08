@@ -71,13 +71,7 @@ jobs:
               assert text.count(old) == 1
               text = text.replace(old, new)
           anchor = '      - name: Ensure package validation tools\n'
-          verified = '''      - name: Verify exact Theos and SDK revisions before compilation
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(git -C "$THEOS" rev-parse HEAD)" = '8167f59de02fd32cf45b16bfcb1330dfa5c9974c'
-          test "$(git -C "$THEOS/sdks" rev-parse HEAD)" = '0222fd5413cf4b9af096f37b4621afa2688572f7'
-'''
+          verified = """      - name: Verify exact Theos and SDK revisions before compilation\n        shell: bash\n        run: |\n          set -euo pipefail\n          test "$(git -C "$THEOS" rev-parse HEAD)" = '8167f59de02fd32cf45b16bfcb1330dfa5c9974c'\n          test "$(git -C "$THEOS/sdks" rev-parse HEAD)" = '0222fd5413cf4b9af096f37b4621afa2688572f7'\n"""
           assert text.count(anchor) == 1
           p.write_text(text.replace(anchor, verified + anchor))
           actual = hashlib.sha256(p.read_bytes()).hexdigest()
