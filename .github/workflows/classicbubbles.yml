@@ -46,6 +46,15 @@ jobs:
           digest = hashlib.sha256(p.read_bytes()).hexdigest()
           assert digest == 'e85a783f858a352e54cf0b8aa4eb70e9f0e22a3080226cb904fdeb13522a19d6', digest
           manifest[str(p)] = digest
+          for sub, expected in [('lab', '00c6fb182b0661913e13b2a134d14040882ab13c1ea7316b69da0b00e30cbcee'), ('probe', 'e527cea49d5818cf77ee6e78e4d23074450434ae8efcf0f58b97a6652a676e56')]:
+              p = Path(sub) / 'Makefile'
+              s = p.read_text()
+              old = '$(THEOS_PROJECT_DIR)/entitlements.plist'
+              assert s.count(old) == 1
+              p.write_text(s.replace(old, f'$(THEOS_PROJECT_DIR)/{sub}/entitlements.plist'))
+              digest = hashlib.sha256(p.read_bytes()).hexdigest()
+              assert digest == expected, digest
+              manifest[str(p)] = digest
           Path('SHA256_MANIFEST.json').write_text(json.dumps(manifest, indent=2, sort_keys=True) + '\n')
           PY
           python3 tests/test_source.py
@@ -77,6 +86,7 @@ jobs:
           shasum -a 256 packages/*.deb | tee BUILD_SHA256.txt
           { xcodebuild -version; xcrun clang --version; git -C "$THEOS" rev-parse HEAD; } > BUILD_TOOLCHAIN.txt
       - name: Upload compiled package and audit evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ClassicBubbles-Lab-0.1.0-rootless
