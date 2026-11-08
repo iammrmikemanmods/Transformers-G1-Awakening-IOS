@@ -114,16 +114,16 @@ jobs:
         run: |
           set -euo pipefail
           cat ci/classicbubbles/v0111.patch.part{1,2,3,4,5}.b64 | base64 -D > /tmp/v0111.patch.xz
-          echo 'fcf976f691e23612aa9516561ff16dbe02aadebd486c9885dfd51d459420fa05  /tmp/v0111.patch.xz' | shasum -a 256 -c -
+          echo 'b55416a02f6f291bf44b20b074168f4c016f9851de971b69305fdd42b4db6f12  /tmp/v0111.patch.xz' | shasum -a 256 -c -
           xz -dc /tmp/v0111.patch.xz > /tmp/v0111.patch
-          echo '89c5fb975c93929f7c4c4b1a7ce24366c849acc277ad5928bafca16d89f4852b  /tmp/v0111.patch' | shasum -a 256 -c -
+          echo 'd2cee9ffe1eb7a44f87959e692f384a6b26f618be0042e09d74794b4f96346d9  /tmp/v0111.patch' | shasum -a 256 -c -
           (cd work && patch -p1 -F 0 --batch --forward -i /tmp/v0111.patch)
           python3 - <<'PY'
           from pathlib import Path
           import hashlib,json
           root=Path('work')
           raw=(root/'SHA256_MANIFEST.json').read_bytes()
-          expected='8cfcf3b20135db4a627d92198d295cedd3970264a48d5fe02ab95abc107d694c'
+          expected='08046a625d895f9d9e8bf8d936e61cb8094bcad5b1fb343cc760f3f91686e34e'
           assert hashlib.sha256(raw).hexdigest()==expected
           manifest=json.loads(raw)
           paths=[p for p in root.rglob('*') if p.is_file() and p.name!='SHA256_MANIFEST.json']
