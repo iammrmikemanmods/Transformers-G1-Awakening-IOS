@@ -20,6 +20,34 @@ jobs:
           mkdir work
           tar -xJf /tmp/classicbubbles-source.tar.xz -C work
           cd work
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json
+          manifest = json.loads(Path('SHA256_MANIFEST.json').read_text())
+          for path, expected in manifest.items():
+              assert hashlib.sha256(Path(path).read_bytes()).hexdigest() == expected, path
+          p = Path('lab/ClassicBubblesLab.m')
+          s = p.read_text()
+          replacements = {
+              'button.contentEdgeInsets = UIEdgeInsetsMake(12, 14, 12, 14);': '''UIButtonConfiguration *configuration = [UIButtonConfiguration plainButtonConfiguration];
+              configuration.attributedTitle = [[NSAttributedString alloc] initWithString:title attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold]}];
+              configuration.contentInsets = NSDirectionalEdgeInsetsMake(12, 14, 12, 14);
+              button.configuration = configuration;''',
+              'self.shareButton.contentEdgeInsets = UIEdgeInsetsMake(14, 14, 14, 14);': '''UIButtonConfiguration *shareConfiguration = [UIButtonConfiguration plainButtonConfiguration];
+              shareConfiguration.attributedTitle = [[NSAttributedString alloc] initWithString:@"Share Report…" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:17 weight:UIFontWeightSemibold]}];
+              shareConfiguration.contentInsets = NSDirectionalEdgeInsetsMake(14, 14, 14, 14);
+              self.shareButton.configuration = shareConfiguration;''',
+          }
+          for old, new in replacements.items():
+              assert s.count(old) == 1, old
+              s = s.replace(old, new)
+          assert 'contentEdgeInsets' not in s
+          p.write_text(s)
+          digest = hashlib.sha256(p.read_bytes()).hexdigest()
+          assert digest == 'e85a783f858a352e54cf0b8aa4eb70e9f0e22a3080226cb904fdeb13522a19d6', digest
+          manifest[str(p)] = digest
+          Path('SHA256_MANIFEST.json').write_text(json.dumps(manifest, indent=2, sort_keys=True) + '\n')
+          PY
           python3 tests/test_source.py
           clang -O2 -Wall -Wextra -Werror common/CBLRunner.c tests/runner_test.c -o /tmp/cbl-runner-test
           /tmp/cbl-runner-test | tee RUNNER_TESTS.txt
@@ -59,5 +87,6 @@ jobs:
             work/BUILD_SHA256.txt
             work/BUILD_TOOLCHAIN.txt
             work/RUNNER_TESTS.txt
+            work/SHA256_MANIFEST.json
           if-no-files-found: error
           retention-days: 30
