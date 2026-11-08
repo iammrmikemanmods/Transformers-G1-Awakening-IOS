@@ -1,4 +1,4 @@
-name: ClassicBubbles Lab 0.1.5 focused read-only PosterBoard host ABI
+name: ClassicBubbles Lab 0.1.6 native procedural registration preflight
 on:
   push:
     branches: [ci/classicbubbles-lab-20261108]
@@ -11,7 +11,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Reconstruct and verify exact source 0.1.0 to 0.1.5; run regression suites
+      - name: Reconstruct/verify 0.1.0–0.1.6 source, regression suite and registration safety
         shell: bash
         run: |
           set -euo pipefail
@@ -140,8 +140,26 @@ jobs:
           Path('SHA256_MANIFEST.json').write_bytes(raw)
           print('PASS: all 39 source files match audited 0.1.5 manifest; preview baseline preserved')
           PY
+          cat ../ci/classicbubbles/v016.patch.part1.b64 ../ci/classicbubbles/v016.patch.part2.b64 ../ci/classicbubbles/v016.patch.part3.b64 ../ci/classicbubbles/v016.patch.part4.b64 | base64 -D > /tmp/v016.patch.xz
+          echo 'c28946f3266efba000208a459c23c34f37a0442b43eadd7788ae3fbe8abe6674  /tmp/v016.patch.xz' | shasum -a 256 -c -
+          xz -dc /tmp/v016.patch.xz > /tmp/v016.patch
+          echo '2df794ff7c5a98ce711d79769bde1e652f1230d95de077c1e7856901aedf1c51  /tmp/v016.patch' | shasum -a 256 -c -
+          patch -p1 -F 0 --batch --forward -i /tmp/v016.patch
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json
+          paths = sorted(p for p in Path('.').rglob('*') if p.is_file() and p.name != 'SHA256_MANIFEST.json')
+          assert len(paths) == 41, len(paths)
+          manifest = {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
+          raw = (json.dumps(manifest,indent=2,sort_keys=True) + '\n').encode('utf-8')
+          value = hashlib.sha256(raw).hexdigest()
+          assert value == '04e1d004437e707fce70599bb8634842ea6714a6dfab8d86d675e539a9962863', value
+          Path('SHA256_MANIFEST.json').write_bytes(raw)
+          print('PASS: all 41 source files match audited 0.1.6; no untracked source')
+          PY
           python3 tests/test_source.py
           python3 tests/host_focus_source_test.py | tee HOST_FOCUS_TESTS.txt
+          python3 tests/native_registration_source_test.py | tee REGISTRATION_TESTS.txt
           clang -O2 -Wall -Wextra -Werror common/CBLRunner.c tests/runner_test.c -o /tmp/cbl-runner-test
           /tmp/cbl-runner-test | tee RUNNER_TESTS.txt
           clang -O2 -Wall -Wextra -Werror common/CBLColor.c tests/color_test.c -o /tmp/cbl-color-test
@@ -194,7 +212,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ClassicBubbles-Lab-0.1.5-rootless
+          name: ClassicBubbles-Lab-0.1.6-rootless
           path: |
             work/packages/*.deb
             work/BUILD_LOG.txt
@@ -206,6 +224,7 @@ jobs:
             work/POWER_RECOVERY_TESTS.txt
             work/HOST_FILTER_TESTS.txt
             work/HOST_FOCUS_TESTS.txt
+            work/REGISTRATION_TESTS.txt
             work/PRESET_TESTS.txt
             work/SHA256_MANIFEST.json
           if-no-files-found: error
