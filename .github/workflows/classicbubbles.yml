@@ -1,4 +1,4 @@
-name: ClassicBubbles Lab 0.1.9 guarded legacy attachment
+name: ClassicBubbles Lab 0.1.10 guarded legacy motion
 on:
   push:
     branches: [ci/classicbubbles-lab-20261108]
@@ -82,6 +82,33 @@ jobs:
               (root/fname).chmod(0o755)
           print('PASS: 57 exact v0.1.9 source hashes; user-verified native Bokeh renderer unchanged')
           PY
+      - name: Apply reviewed 0.1.10 legacy motion patch (hash-checked)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat ci/classicbubbles/v0110.patch.part1.b64 ci/classicbubbles/v0110.patch.part2.b64 ci/classicbubbles/v0110.patch.part3.b64 ci/classicbubbles/v0110.patch.part4.b64 ci/classicbubbles/v0110.patch.part5.b64 | base64 -D > /tmp/v0110.patch.xz
+          echo 'e679331a1843844120990e45ae5bae5c9631c147811efbb2a3b974b2d76c657c  /tmp/v0110.patch.xz' | shasum -a 256 -c -
+          xz -dc /tmp/v0110.patch.xz > /tmp/v0110.patch
+          echo '2cae88c7942e5a543967bf2924263c5d916b2e9b2b16bfe9fa692d2c56e253f8  /tmp/v0110.patch' | shasum -a 256 -c -
+          (cd work && patch -p1 -F 0 --batch --forward -i /tmp/v0110.patch)
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json
+          root=Path('work')
+          raw=(root/'SHA256_MANIFEST.json').read_bytes()
+          expected='e43c28b6299e14f829fcf64ed77cacf704a081d0049a84520a619dcaa3534993'
+          assert hashlib.sha256(raw).hexdigest()==expected
+          manifest=json.loads(raw)
+          files=[p for p in root.rglob('*') if p.is_file() and p.name!='SHA256_MANIFEST.json']
+          assert len(files)==len(manifest)==62
+          assert {str(p.relative_to(root)) for p in files}==set(manifest)
+          for name,sha in manifest.items():
+              assert hashlib.sha256((root/name).read_bytes()).hexdigest()==sha,name
+          assert hashlib.sha256((root/'lab/CBLPreview.m').read_bytes()).hexdigest()=='8cb2a3cf743742d2671b5f5e41aa9163957f926abaf7b43e43a35faea45bb483'
+          for name in ('layout/DEBIAN/postinst','layout/DEBIAN/postrm','tests/run_macos.sh'):
+              (root/name).chmod(0o755)
+          print('PASS: 62 exact v0.1.10 files; modern Bokeh renderer SHA unchanged')
+          PY
       - name: Regression and executable recovery tests
         working-directory: work
         shell: bash
@@ -125,7 +152,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ClassicBubbles-Lab-0.1.9-rootless
+          name: ClassicBubbles-Lab-0.1.10-rootless
           path: |
             work/packages/*.deb
             work/*TESTS.txt
