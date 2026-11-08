@@ -132,14 +132,12 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import hashlib, json
-          raw = Path('SHA256_MANIFEST.json').read_bytes()
+          files = [p for p in sorted(Path('.').rglob('*')) if p.is_file() and p.name != 'SHA256_MANIFEST.json']
+          assert len(files) == 39, len(files)
+          manifest = {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in files}
+          raw = (json.dumps(manifest, indent=2, sort_keys=True) + '\n').encode('utf-8')
           assert hashlib.sha256(raw).hexdigest() == 'deff20dfdadad579ae3de7fc7e9f3993b68e4a1ad77556a19617073323b13df1'
-          manifest = json.loads(raw)
-          files = [p for p in Path('.').rglob('*') if p.is_file() and p.name != 'SHA256_MANIFEST.json']
-          assert len(files) == len(manifest) == 39
-          assert set(str(p) for p in files) == set(manifest), 'unexpected files in source'
-          for path, expected in manifest.items():
-              assert hashlib.sha256(Path(path).read_bytes()).hexdigest() == expected, path
+          Path('SHA256_MANIFEST.json').write_bytes(raw)
           print('PASS: all 39 source files match audited 0.1.5 manifest; preview baseline preserved')
           PY
           python3 tests/test_source.py
