@@ -1,0 +1,63 @@
+name: ClassicBubbles Lab 0.1.0 native diagnostic app
+on:
+  push:
+    branches: [ci/classicbubbles-lab-20261108]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct and verify source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat ci/classicbubbles/source.part*.b64 | base64 -D > /tmp/classicbubbles-source.tar.xz
+          echo 'b11ac84dc5c63860b3bf189e3fec95efcc9c7133b2187513d4194f877dde81b8  /tmp/classicbubbles-source.tar.xz' | shasum -a 256 -c -
+          mkdir work
+          tar -xJf /tmp/classicbubbles-source.tar.xz -C work
+          cd work
+          python3 tests/test_source.py
+          clang -O2 -Wall -Wextra -Werror common/CBLRunner.c tests/runner_test.c -o /tmp/cbl-runner-test
+          /tmp/cbl-runner-test | tee RUNNER_TESTS.txt
+      - name: Install Theos and iOS SDK
+        uses: waruhachi/theos-action@97afc8c6c361c8b379ee64f42c8a0e41d725ce37
+        with:
+          theos-src: theos/theos
+          theos-branch: master
+          sdks-src: theos/sdks
+          sdks-branch: master
+          remotelog: 'false'
+          libgcuniversal: 'false'
+          altlist: 'false'
+          comet: 'false'
+          orion: 'false'
+      - name: Ensure packaging tools
+        shell: bash
+        run: |
+          if ! command -v dpkg-deb >/dev/null 2>&1; then brew install dpkg; fi
+      - name: Compile actual ARM64 app and helper, package and verify
+        working-directory: work
+        shell: bash
+        run: |
+          set -euo pipefail
+          make clean package FINALPACKAGE=1 2>&1 | tee BUILD_LOG.txt
+          python3 tests/validate_deb.py packages/*.deb | tee PACKAGE_VALIDATION.txt
+          shasum -a 256 packages/*.deb | tee BUILD_SHA256.txt
+          { xcodebuild -version; xcrun clang --version; git -C "$THEOS" rev-parse HEAD; } > BUILD_TOOLCHAIN.txt
+      - name: Upload compiled package and audit evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClassicBubbles-Lab-0.1.0-rootless
+          path: |
+            work/packages/*.deb
+            work/BUILD_LOG.txt
+            work/PACKAGE_VALIDATION.txt
+            work/BUILD_SHA256.txt
+            work/BUILD_TOOLCHAIN.txt
+            work/RUNNER_TESTS.txt
+          if-no-files-found: error
+          retention-days: 30
