@@ -49,13 +49,49 @@ jobs:
           patch -p1 -F 0 --batch --forward -i /tmp/v012.patch
           python3 - <<'PY'
           from pathlib import Path
+          import hashlib
+          p = Path('lab/CBLPreview.m')
+          raw = p.read_bytes()
+          assert hashlib.sha256(raw).hexdigest() == '14a767b7ef35cf0ac0d3562c44cdf4946984123b2cef7852753fef7349b4e785'
+          old = '    self.fullscreenToggle.configuration = [UIButtonConfiguration filledButtonConfiguration];'
+          new = '    UIButtonConfiguration *toggleStyle = [UIButtonConfiguration filledButtonConfiguration];\n    toggleStyle.title = @"Hide controls";\n    self.fullscreenToggle.configuration = toggleStyle;'
+          text = raw.decode()
+          assert text.count(old) == 1
+          p.write_text(text.replace(old, new))
+          assert hashlib.sha256(p.read_bytes()).hexdigest() == 'abc8287d43c4b328b9bf22dc9ef7e95be660ba2a442e9ea36ff73784a452b910'
+
+          p = Path('.github/workflows/build.yml')
+          raw = p.read_bytes()
+          assert hashlib.sha256(raw).hexdigest() == 'aa51500ea8abab7f7da2abd7bf6f44b5b505e41036cc517bc87bcb2ba2105b75'
+          text = raw.decode()
+          for old, new in [
+              ('theos-branch: 8167f59de02fd32cf45b16bfcb1330dfa5c9974c','theos-branch: master'),
+              ('sdks-branch: 0222fd5413cf4b9af096f37b4621afa2688572f7','sdks-branch: master')
+          ]:
+              assert text.count(old) == 1
+              text = text.replace(old, new)
+          anchor = '      - name: Ensure package validation tools\n'
+          verified = '''      - name: Verify exact Theos and SDK revisions before compilation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C "$THEOS" rev-parse HEAD)" = '8167f59de02fd32cf45b16bfcb1330dfa5c9974c'
+          test "$(git -C "$THEOS/sdks" rev-parse HEAD)" = '0222fd5413cf4b9af096f37b4621afa2688572f7'
+'''
+          assert text.count(anchor) == 1
+          p.write_text(text.replace(anchor, verified + anchor))
+          actual = hashlib.sha256(p.read_bytes()).hexdigest()
+          assert actual == '487fe6a51c688fe7fbb91dbb49e95472f3139d518d9a5843e006617c2bb28b9a', actual
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
           import hashlib, json
           paths = [p for p in sorted(Path('.').rglob('*')) if p.is_file() and p.name != 'SHA256_MANIFEST.json']
           assert len(paths) == 31, [str(p) for p in paths]
           manifest = {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
           txt = json.dumps(manifest, indent=2, sort_keys=True) + '\n'
           actual = hashlib.sha256(txt.encode()).hexdigest()
-          assert actual == '35be906d52e63968e8ea2d1fdaf09a57fb6558e0aa2e7dfc37f5a8ff3cb32101', actual
+          assert actual == '21d5b8b3a0799ffaad9f7d20c935d9c635ab09cdab281c9f3bde9835b4f49f48', actual
           Path('SHA256_MANIFEST.json').write_text(txt)
           print('PASS: all 31 source hashes match audited 0.1.2')
           PY
@@ -70,14 +106,20 @@ jobs:
         uses: waruhachi/theos-action@97afc8c6c361c8b379ee64f42c8a0e41d725ce37
         with:
           theos-src: theos/theos
-          theos-branch: 8167f59de02fd32cf45b16bfcb1330dfa5c9974c
+          theos-branch: master
           sdks-src: theos/sdks
-          sdks-branch: 0222fd5413cf4b9af096f37b4621afa2688572f7
+          sdks-branch: master
           remotelog: 'false'
           libgcuniversal: 'false'
           altlist: 'false'
           comet: 'false'
           orion: 'false'
+      - name: Confirm exact toolchain snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C "$THEOS" rev-parse HEAD)" = '8167f59de02fd32cf45b16bfcb1330dfa5c9974c'
+          test "$(git -C "$THEOS/sdks" rev-parse HEAD)" = '0222fd5413cf4b9af096f37b4621afa2688572f7'
       - name: Ensure packaging tools
         shell: bash
         run: |
